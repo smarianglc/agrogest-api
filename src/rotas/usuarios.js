@@ -6,29 +6,34 @@ const { autenticar, autorizar } = require('../middlewares/auth');
 
 const router = express.Router();
 const PERFIS = ['ADMIN', 'AGRONOMO', 'FINANCEIRO'];
-const CAMPOS_PUBLICOS = { id: true, nome: true, email: true, perfil: true, ativo: true };
+
+// O perfil exibido é o do vínculo com a fazenda ativa
+function formatar(vinculo) {
+  const { usuario } = vinculo;
+  return { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: vinculo.perfil, ativo: usuario.ativo && vinculo.ativo };
+}
 
 router.use(autenticar, autorizar(['ADMIN'], 'ACESSO_NEGADO'));
 
 router.get('/', async (req, res) => {
-  const usuarios = await prisma.usuario.findMany({
+  const vinculos = await prisma.vinculo.findMany({
     where: { fazendaId: req.usuario.fazendaId },
-    select: CAMPOS_PUBLICOS,
-    orderBy: { nome: 'asc' },
+    include: { usuario: true },
+    orderBy: { usuario: { nome: 'asc' } },
   });
-  res.json(usuarios);
+  res.json(vinculos.map(formatar));
 });
 
 router.get('/:id', async (req, res) => {
-  // RN-01: busca pelo id E pela fazenda do token. Se for de outra fazenda, é como se não existisse.
-  const usuario = await prisma.usuario.findFirst({
-    where: { id: req.params.id, fazendaId: req.usuario.fazendaId },
-    select: CAMPOS_PUBLICOS,
+  // RN-01: só encontra quem tem vínculo com a fazenda ativa. De outra fazenda, é como se não existisse.
+  const vinculo = await prisma.vinculo.findFirst({
+    where: { usuarioId: req.params.id, fazendaId: req.usuario.fazendaId },
+    include: { usuario: true },
   });
-  if (!usuario) {
+  if (!vinculo) {
     throw new ErroApi(404, 'RN-01', 'Usuário não encontrado');
   }
-  res.json(usuario);
+  res.json(formatar(vinculo));
 });
 
 router.post('/', async (req, res) => {
@@ -47,11 +52,16 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const novo = await prisma.usuario.create({
-      data: { nome, email, perfil, senhaHash: await bcrypt.hash(senha, 10), fazendaId: req.usuario.fazendaId },
-      select: CAMPOS_PUBLICOS,
+    // Usuário e vínculo nascem juntos: ou os dois são gravados, ou nenhum
+    const vinculo = await prisma.vinculo.create({
+      data: {
+        perfil,
+        fazenda: { connect: { id: req.usuario.fazendaId } },
+        usuario: { create: { nome, email, senhaHash: await bcrypt.hash(senha, 10) } },
+      },
+      include: { usuario: true },
     });
-    res.status(201).json(novo);
+    res.status(201).json(formatar(vinculo));
   } catch (erro) {
     // Duas requisições simultâneas com o mesmo e-mail: o banco barra a segunda
     if (erro.code === 'P2002') {
