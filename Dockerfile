@@ -16,6 +16,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY prisma ./prisma
 COPY src ./src
+COPY docs ./docs
 USER node
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma migrate deploy && node src/server.js"]

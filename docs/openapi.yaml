@@ -1,0 +1,361 @@
+openapi: 3.0.3
+info:
+  title: AgroGest API
+  version: 0.1.0
+  description: |
+    API fictícia de ERP agro usada no portfólio de QA.
+    Erros seguem o formato { "codigo": "RN-XX", "mensagem": "..." }.
+    Valores decimais são trafegados como texto com casas fixas.
+
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Sistema
+  - name: Acesso
+  - name: Estoque
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Erro:
+      type: object
+      required: [codigo, mensagem]
+      properties:
+        codigo: { type: string, example: RN-06 }
+        mensagem: { type: string, example: Quantidade e valor da nota devem ser maiores que zero }
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nome: { type: string }
+        email: { type: string, format: email }
+        perfil: { type: string, enum: [ADMIN, AGRONOMO, FINANCEIRO] }
+        ativo: { type: boolean }
+
+    Insumo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fazendaId: { type: string, format: uuid }
+        nome: { type: string, example: Ureia }
+        especificacao: { type: string, nullable: true, example: 45% N }
+        lote: { type: string, nullable: true, example: U-0412 }
+        validade: { type: string, format: date, nullable: true }
+        categoria: { type: string, enum: [SEMENTE, FERTILIZANTE, DEFENSIVO] }
+        unidade: { type: string, enum: [KG, L, SC] }
+        saldo: { type: string, example: "15000.000" }
+        custoMedio: { type: string, example: "3.17" }
+        estoqueMinimo: { type: string, example: "50.000" }
+        emAlerta: { type: boolean, description: "RN-07: saldo abaixo do estoque mínimo" }
+
+    EntradaNota:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        insumoId: { type: string, format: uuid }
+        numeroNota: { type: string, example: "000123" }
+        fornecedor: { type: string, example: Agro Insumos Fictícios }
+        quantidade: { type: string, example: "5000.000" }
+        valorTotal: { type: string, example: "17500.00" }
+        dataEmissao: { type: string, format: date }
+        numeroParcelas: { type: integer, example: 1 }
+
+  responses:
+    NaoAutenticado:
+      description: RN-03 — token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    SemPermissao:
+      description: Perfil sem permissão (RN-02 ou ACESSO_NEGADO)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    NaoEncontrado:
+      description: RN-01 — recurso inexistente ou de outra fazenda
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+    DadosInvalidos:
+      description: Violação de regra ou dados inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Erro' }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Verifica se a API está no ar
+      security: []
+      responses:
+        '200':
+          description: API disponível
+
+  /auth/login:
+    post:
+      tags: [Acesso]
+      summary: Autentica e devolve um token JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, senha]
+              properties:
+                email: { type: string, example: roberto@boasafra.test }
+                senha: { type: string, example: Agro@2026 }
+      responses:
+        '200':
+          description: Login realizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  usuario:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      nome: { type: string }
+                      perfil: { type: string }
+                      fazendaId: { type: string }
+                  fazendas:
+                    type: array
+                    description: Fazendas com vínculo ativo; a primeira é a fazenda ativa do token
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        nome: { type: string }
+                        perfil: { type: string, enum: [ADMIN, AGRONOMO, FINANCEIRO] }
+        '401':
+          description: CREDENCIAIS_INVALIDAS
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        '422': { $ref: '#/components/responses/DadosInvalidos' }
+
+  /auth/trocar-fazenda:
+    post:
+      tags: [Acesso]
+      summary: Troca a fazenda ativa e devolve um token novo (RN-21)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fazendaId]
+              properties:
+                fazendaId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Token novo para a fazenda escolhida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  fazendaId: { type: string }
+                  perfil: { type: string, enum: [ADMIN, AGRONOMO, FINANCEIRO] }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '404':
+          description: RN-21 — fazenda sem vínculo ativo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+
+  /fazendas/atual:
+    get:
+      tags: [Acesso]
+      summary: Dados da fazenda do usuário logado
+      responses:
+        '200': { description: Fazenda do token }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+
+  /usuarios:
+    get:
+      tags: [Acesso]
+      summary: Lista os usuários da fazenda (ADMIN)
+      responses:
+        '200':
+          description: Usuários da própria fazenda
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+    post:
+      tags: [Acesso]
+      summary: Cria um usuário na fazenda (ADMIN)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, email, senha, perfil]
+              properties:
+                nome: { type: string }
+                email: { type: string }
+                senha: { type: string, minLength: 8 }
+                perfil: { type: string, enum: [ADMIN, AGRONOMO, FINANCEIRO] }
+      responses:
+        '201':
+          description: Usuário criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '409':
+          description: RN-04 — e-mail já cadastrado no sistema
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }
+        '422': { $ref: '#/components/responses/DadosInvalidos' }
+
+  /usuarios/{id}:
+    get:
+      tags: [Acesso]
+      summary: Detalha um usuário da fazenda (ADMIN)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Usuário encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+
+  /insumos:
+    get:
+      tags: [Estoque]
+      summary: Lista os insumos da fazenda
+      parameters:
+        - name: alerta
+          in: query
+          description: true para listar só os insumos em alerta (RN-07)
+          schema: { type: string, enum: ['true'] }
+      responses:
+        '200':
+          description: Insumos da própria fazenda
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Insumo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+    post:
+      tags: [Estoque]
+      summary: Cadastra um insumo (ADMIN, FINANCEIRO)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, categoria, unidade]
+              properties:
+                nome: { type: string }
+                categoria: { type: string, enum: [SEMENTE, FERTILIZANTE, DEFENSIVO] }
+                unidade: { type: string, enum: [KG, L, SC] }
+                estoqueMinimo: { oneOf: [{ type: number }, { type: string }], example: 5000 }
+                especificacao: { type: string, example: 45% N }
+                lote: { type: string, example: U-0412 }
+                validade: { type: string, format: date, example: "2027-12-31" }
+      responses:
+        '201':
+          description: Insumo criado com saldo e custo médio zerados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Insumo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '422': { $ref: '#/components/responses/DadosInvalidos' }
+
+  /insumos/{id}:
+    get:
+      tags: [Estoque]
+      summary: Detalha um insumo da fazenda
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Insumo encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Insumo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+
+  /entradas-nota:
+    get:
+      tags: [Estoque]
+      summary: Lista as entradas de nota da fazenda (ADMIN, FINANCEIRO)
+      responses:
+        '200':
+          description: Entradas da própria fazenda
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EntradaNota' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+    post:
+      tags: [Estoque]
+      summary: Registra uma entrada de nota e atualiza saldo e custo médio (RN-05)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [insumoId, numeroNota, fornecedor, quantidade, valorTotal, dataEmissao]
+              properties:
+                insumoId: { type: string, format: uuid }
+                numeroNota: { type: string, example: "000123" }
+                fornecedor: { type: string, example: Agro Insumos Fictícios }
+                quantidade: { oneOf: [{ type: number }, { type: string }], example: 5000 }
+                valorTotal: { oneOf: [{ type: number }, { type: string }], example: 17500.00 }
+                dataEmissao: { type: string, format: date, example: "2026-11-05" }
+                numeroParcelas: { type: integer, example: 1 }
+      responses:
+        '201':
+          description: Nota registrada; devolve a nota e o insumo atualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entrada: { $ref: '#/components/schemas/EntradaNota' }
+                  insumo: { $ref: '#/components/schemas/Insumo' }
+        '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '403': { $ref: '#/components/responses/SemPermissao' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
+        '422':
+          description: RN-06 (quantidade ou valor menor ou igual a zero) ou dados inválidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Erro' }

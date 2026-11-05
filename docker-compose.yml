@@ -22,7 +22,7 @@ services:
       DATABASE_URL: postgresql://agrogest:agrogest@db:5432/agrogest
       JWT_SECRET: segredo-local-do-docker
       JWT_EXPIRES_IN: 1h
-      BUGS_ENABLED: "false"
+      BUGS_ENABLED: "${BUGS_ENABLED:-false}"
     ports:
       - "3000:3000"
     depends_on:
