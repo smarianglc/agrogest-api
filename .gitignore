@@ -1,3 +1,7 @@
 node_modules
-.env
 npm-debug.log
+
+# Variáveis de ambiente: nunca vão para o Git (só o .env.example)
+.env
+.env.*
+!.env.example
