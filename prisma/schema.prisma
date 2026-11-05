@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  ADMIN
+  AGRONOMO
+  FINANCEIRO
+}
+
+enum CategoriaInsumo {
+  SEMENTE
+  FERTILIZANTE
+  DEFENSIVO
+}
+
+enum UnidadeInsumo {
+  KG
+  L
+  SC
+}
+
+model Fazenda {
+  id           String        @id @default(uuid())
+  nome         String
+  cidade       String
+  areaTotalHa  Decimal       @db.Decimal(12, 2)
+  criadoEm     DateTime      @default(now())
+  usuarios     Usuario[]
+  insumos      Insumo[]
+  entradasNota EntradaNota[]
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  fazendaId String
+  fazenda   Fazenda  @relation(fields: [fazendaId], references: [id])
+  nome      String
+  email     String   @unique
+  senhaHash String
+  perfil    Perfil
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  @@index([fazendaId])
+}
+
+model Insumo {
+  id            String          @id @default(uuid())
+  fazendaId     String
+  fazenda       Fazenda         @relation(fields: [fazendaId], references: [id])
+  nome          String
+  categoria     CategoriaInsumo
+  unidade       UnidadeInsumo
+  saldo         Decimal         @default(0) @db.Decimal(14, 3)
+  custoMedio    Decimal         @default(0) @db.Decimal(14, 2)
+  estoqueMinimo Decimal         @default(0) @db.Decimal(14, 3)
+  criadoEm      DateTime        @default(now())
+  entradas      EntradaNota[]
+
+  @@index([fazendaId])
+}
+
+model EntradaNota {
+  id             String   @id @default(uuid())
+  fazendaId      String
+  fazenda        Fazenda  @relation(fields: [fazendaId], references: [id])
+  insumoId       String
+  insumo         Insumo   @relation(fields: [insumoId], references: [id])
+  numeroNota     String
+  fornecedor     String
+  quantidade     Decimal  @db.Decimal(14, 3)
+  valorTotal     Decimal  @db.Decimal(14, 2)
+  dataEmissao    DateTime @db.Date
+  numeroParcelas Int      @default(1)
+  criadoEm       DateTime @default(now())
+
+  @@index([fazendaId])
+}
