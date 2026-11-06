@@ -1,3 +1,13 @@
+function formatarFazenda(fazenda) {
+  return {
+    id: fazenda.id,
+    nome: fazenda.nome,
+    cidade: fazenda.cidade,
+    areaTotalHa: fazenda.areaTotalHa.toFixed(2),
+    criadoEm: fazenda.criadoEm,
+  };
+}
+
 function formatarInsumo(insumo) {
   return {
     id: insumo.id,
@@ -28,4 +38,4 @@ function formatarEntrada(entrada) {
   };
 }
 
-module.exports = { formatarInsumo, formatarEntrada };
+module.exports = { formatarFazenda, formatarInsumo, formatarEntrada };

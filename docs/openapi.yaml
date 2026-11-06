@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AgroGest API
-  version: 0.1.0
+  version: 0.1.1
   description: |
     API fictícia de ERP agro usada no portfólio de QA.
     Erros seguem o formato { "codigo": "RN-XX", "mensagem": "..." }.
@@ -29,6 +29,15 @@ components:
       properties:
         codigo: { type: string, example: RN-06 }
         mensagem: { type: string, example: Quantidade e valor da nota devem ser maiores que zero }
+
+    Fazenda:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nome: { type: string, example: Fazenda Boa Safra }
+        cidade: { type: string, example: Dourados }
+        areaTotalHa: { type: string, example: "1200.00" }
+        criadoEm: { type: string, format: date-time }
 
     Usuario:
       type: object
@@ -185,8 +194,13 @@ paths:
       tags: [Acesso]
       summary: Dados da fazenda do usuário logado
       responses:
-        '200': { description: Fazenda do token }
+        '200':
+          description: Fazenda ativa do token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Fazenda' }
         '401': { $ref: '#/components/responses/NaoAutenticado' }
+        '404': { $ref: '#/components/responses/NaoEncontrado' }
 
   /usuarios:
     get:

@@ -5,7 +5,7 @@
 API REST fictícia de um ERP agro (AgroGest), usada como sistema testado no portfólio de QA.
 Toda a empresa, regras e dados são fictícios.
 
-## Versão atual: 0.1.0
+## Versão atual: 0.1.1
 
 Acesso, perfis e troca de fazenda (RN-01 a RN-04, RN-21) e estoque de insumos (RN-05 a RN-07).
 Documentação OpenAPI em `/docs`.
