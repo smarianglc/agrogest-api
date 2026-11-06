@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Rodar ESLint
+        run: npm run lint
+
+  fumaca:
+    name: Teste de fumaça
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Subir API e banco
+        run: docker compose up --build -d --wait
+
+      - name: Rodar o seed
+        run: docker compose exec -T api npx prisma db seed
+
+      - name: Verificar health e login
+        run: |
+          curl -fsS http://localhost:3000/health
+          curl -fsS -X POST http://localhost:3000/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"roberto@boasafra.test","senha":"Agro@2026"}' > /dev/null
+          curl -fsS http://localhost:3000/openapi.json > /dev/null
+          echo "API respondeu em /health, /auth/login e /openapi.json"
+
+      - name: Mostrar logs se falhar
+        if: failure()
+        run: docker compose logs
+
+      - name: Derrubar ambiente
+        if: always()
+        run: docker compose down -v
+
+  publicar:
+    name: Publicar imagem no GHCR
+    needs: fumaca
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Definir tags da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agrogest-api
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
