@@ -1,0 +1,4 @@
+services:
+  api:
+    image: ghcr.io/smarianglc/agrogest-api:${API_VERSION:-0.1.0}
+    build: !reset null
